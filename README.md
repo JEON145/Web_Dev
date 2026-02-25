@@ -9,8 +9,47 @@ Currently, two official plugins are available:
 
 ## React Compiler
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-## Expanding the ESLint configuration
+# My Inventory App
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+This repository contains a full-stack inventory application: a Node/Express backend and a React + Vite frontend.
+
+Contents
+- `backend/` — Express server, database config, migrations, and file uploads.
+- `frontend/` — Vite + React app with components and pages for inventory, auth, and marketplace.
+
+Quick start (development)
+
+1. Install dependencies for backend and frontend:
+
+```powershell
+cd backend
+npm install
+cd ../frontend
+npm install
+```
+
+2. Run backend (from `backend/`):
+
+```powershell
+npm start
+# or
+node server.js
+```
+
+3. Run frontend (from `frontend/`):
+
+```powershell
+npm run dev
+```
+
+Notes
+- `node_modules/` is ignored by `.gitignore` and is not tracked in the repo.
+- `backend/` contains example uploads under `backend/uploads/`.
+
+License
+- Add a license file if you intend to open-source this project.
+
+Contact
+- For questions, open an issue or contact the maintainer.
+
