@@ -13,6 +13,8 @@ const registerSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   role: z.enum(['user', 'admin']),
+  securityQuestion: z.string().min(5, 'Please provide a security question'),
+  securityAnswer: z.string().min(2, 'Please provide an answer'),
 });
 
 export default function RegisterPage() {
@@ -26,7 +28,7 @@ export default function RegisterPage() {
     formState: { errors, isSubmitting } 
   } = useForm({
     resolver: zodResolver(registerSchema),
-    defaultValues: { shopName: '', username: '', email: '', password: '', role: 'user' }
+    defaultValues: { shopName: '', username: '', email: '', password: '', role: 'user', securityQuestion: '', securityAnswer: '' }
   });
 
   const onSubmit = async (data) => {
@@ -163,6 +165,30 @@ export default function RegisterPage() {
                 </button>
               </div>
               {errors.password && <span className="input-error-text">{errors.password.message}</span>}
+            </div>
+
+            <div className="input-group">
+              <label htmlFor="securityQuestion">Security Question</label>
+              <input
+                id="securityQuestion"
+                type="text"
+                placeholder="e.g. What is your mother's maiden name?"
+                {...register('securityQuestion')}
+                className={errors.securityQuestion ? 'error' : ''}
+              />
+              {errors.securityQuestion && <span className="input-error-text">{errors.securityQuestion.message}</span>}
+            </div>
+
+            <div className="input-group">
+              <label htmlFor="securityAnswer">Security Answer</label>
+              <input
+                id="securityAnswer"
+                type="text"
+                placeholder="Answer to security question"
+                {...register('securityAnswer')}
+                className={errors.securityAnswer ? 'error' : ''}
+              />
+              {errors.securityAnswer && <span className="input-error-text">{errors.securityAnswer.message}</span>}
             </div>
 
             <div className="input-group">

@@ -14,18 +14,19 @@ const emailSchema = z.object({
 const resetSchema = z.object({
   resetCode: z.string().length(6, 'Reset code must be 6 digits'),
   newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+const securityResetSchema = z.object({
+  securityAnswer: z.string().min(1, 'Provide your security answer'),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string().min(6, 'Password must be at least 6 characters'),
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
-
-export default function ForgotPasswordPage() {
-  const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [securityQuestion, setSecurityQuestion] = useState('');
   const navigate = useNavigate();
 
   // Form for step 1
@@ -38,43 +39,43 @@ export default function ForgotPasswordPage() {
   const resetForm = useForm({
     resolver: zodResolver(resetSchema),
     defaultValues: { resetCode: '', newPassword: '', confirmPassword: '' }
+  const resetForm = useForm({
+    resolver: zodResolver(securityResetSchema),
+    defaultValues: { securityAnswer: '', newPassword: '', confirmPassword: '' }
   });
-
-  // Step 1: Request reset code
+    setError('');
+    setSuccess('');
   const handleRequestReset = async (data) => {
     setError('');
     setSuccess('');
 
     try {
-      const res = await API.post('/forgot-password', { email: data.email });
+      const res = await API.get('/security-question', { params: { email: data.email } });
       setEmail(data.email);
-      setSuccess(res.data.message || 'Reset code sent to your email!');
+      setSecurityQuestion(res.data.securityQuestion);
       setStep(2);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to send reset code. Please try again.');
+      setError(err.response?.data?.error || 'Could not find account for that email.');
     }
   };
-
-  // Step 2: Verify code and reset password
+    setError('');
+    setSuccess('');
   const handleResetPassword = async (data) => {
     setError('');
     setSuccess('');
 
     try {
-      const res = await API.post('/reset-password', { 
+      const res = await API.post('/reset-password-security', { 
         email, 
-        resetCode: data.resetCode, 
+        securityAnswer: data.securityAnswer, 
         newPassword: data.newPassword 
       });
       setSuccess(res.data.message || 'Password reset successfully!');
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to reset password. Invalid or expired code.');
+      setError(err.response?.data?.error || 'Failed to reset password. Incorrect answer.');
     }
   };
-
-  return (
-    <div className="login-page">
       <div className="login-card">
         {/* Left Panel - Branding */}
         <div className="login-brand">

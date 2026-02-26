@@ -29,13 +29,16 @@ const verifyToken = (req, res, next) => {
 // --- AUTH ROUTES ---
 
 app.post('/api/register', async (req, res) => {
-  const { username, password, email, role, shopName } = req.body;
+  const { username, password, email, role, shopName, securityQuestion, securityAnswer } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
     const userRole = role === 'admin' ? 'admin' : 'user';
+    // Hash security answer if provided
+    const hashedAnswer = securityAnswer ? await bcrypt.hash(securityAnswer, 10) : null;
+
     await pool.query(
-      'INSERT INTO users (username, password, email, role, shop_name) VALUES ($1, $2, $3, $4, $5)', 
-      [username, hashedPassword, email || null, userRole, shopName || username]
+      'INSERT INTO users (username, password, email, role, shop_name, security_question, security_answer) VALUES ($1, $2, $3, $4, $5, $6, $7)', 
+      [username, hashedPassword, email || null, userRole, shopName || username, securityQuestion || null, hashedAnswer]
     );
     res.status(201).json({ message: "User created successfully" });
   } catch (err) {
@@ -75,38 +78,8 @@ app.post('/api/login', async (req, res) => {
 const resetCodes = new Map();
 
 app.post('/api/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "No account found with this email address." });
-    }
-
-    // Generate a 6-digit reset code
-    const resetCode = crypto.randomInt(100000, 999999).toString();
-    
-    // Store the code with expiry (15 minutes)
-    resetCodes.set(email, {
-      code: resetCode,
-      expiry: Date.now() + 15 * 60 * 1000, // 15 minutes
-      userId: result.rows[0].id
-    });
-
-    // In production, you would send this via email using nodemailer
-    // For development, we'll log it and return a success message
-    console.log(`🔐 Password reset code for ${email}: ${resetCode}`);
-    
-    res.json({ 
-      message: "Reset code sent to your email! (Check server console for development)",
-      // Remove this in production - only for testing
-      devCode: process.env.NODE_ENV === 'development' ? resetCode : undefined
-    });
-  } catch (err) {
-    console.error("Forgot password error:", err);
-    res.status(500).json({ error: "Failed to process password reset request." });
-  }
+  // Deprecated in favor of security-question flow. Keep endpoint for compatibility.
+  res.status(400).json({ error: 'Password reset via email code is disabled. Use security question flow.' });
 });
 
 app.post('/api/reset-password', async (req, res) => {
@@ -139,6 +112,50 @@ app.post('/api/reset-password', async (req, res) => {
   } catch (err) {
     console.error("Reset password error:", err);
     res.status(500).json({ error: "Failed to reset password." });
+  }
+});
+
+// New endpoint: return security question for an email (if exists)
+app.get('/api/security-question', async (req, res) => {
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const result = await pool.query('SELECT security_question FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'No account found with this email' });
+
+    const { security_question } = result.rows[0];
+    if (!security_question) return res.status(404).json({ error: 'No security question set for this account' });
+
+    res.json({ securityQuestion: security_question });
+  } catch (err) {
+    console.error('Security question lookup error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// New endpoint: reset password by verifying security answer
+app.post('/api/reset-password-security', async (req, res) => {
+  const { email, securityAnswer, newPassword } = req.body;
+  if (!email || !securityAnswer || !newPassword) return res.status(400).json({ error: 'Missing required fields' });
+
+  try {
+    const result = await pool.query('SELECT id, security_answer FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'No account found with this email' });
+
+    const user = result.rows[0];
+    if (!user.security_answer) return res.status(400).json({ error: 'Security answer not set for this account' });
+
+    const match = await bcrypt.compare(securityAnswer, user.security_answer);
+    if (!match) return res.status(401).json({ error: 'Incorrect security answer' });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, user.id]);
+
+    res.json({ message: 'Password reset successfully via security question.' });
+  } catch (err) {
+    console.error('Reset via security error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
