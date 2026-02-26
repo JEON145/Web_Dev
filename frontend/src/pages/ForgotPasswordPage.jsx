@@ -19,6 +19,9 @@ const securityResetSchema = z.object({
   message: "Passwords don't match",
   path: ["confirmPassword"],
 });
+
+export default function ForgotPasswordPage() {
+  const [step, setStep] = useState(1);
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -52,8 +55,8 @@ const securityResetSchema = z.object({
       setError(err.response?.data?.error || 'Could not find account for that email.');
     }
   };
-    setError('');
-    setSuccess('');
+
+  // Step 2: Verify security answer and reset password
   const handleResetPassword = async (data) => {
     setError('');
     setSuccess('');
@@ -70,6 +73,9 @@ const securityResetSchema = z.object({
       setError(err.response?.data?.error || 'Failed to reset password. Incorrect answer.');
     }
   };
+
+  return (
+    <div className="login-page">
       <div className="login-card">
         {/* Left Panel - Branding */}
         <div className="login-brand">
