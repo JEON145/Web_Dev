@@ -11,9 +11,6 @@ const emailSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
 });
 
-const resetSchema = z.object({
-  resetCode: z.string().length(6, 'Reset code must be 6 digits'),
-  newPassword: z.string().min(6, 'Password must be at least 6 characters'),
 const securityResetSchema = z.object({
   securityAnswer: z.string().min(1, 'Provide your security answer'),
   newPassword: z.string().min(6, 'Password must be at least 6 characters'),
@@ -35,16 +32,13 @@ const securityResetSchema = z.object({
     defaultValues: { email: '' }
   });
 
-  // Form for step 2
-  const resetForm = useForm({
-    resolver: zodResolver(resetSchema),
-    defaultValues: { resetCode: '', newPassword: '', confirmPassword: '' }
+  // Form for step 2 (security answer + new password)
   const resetForm = useForm({
     resolver: zodResolver(securityResetSchema),
     defaultValues: { securityAnswer: '', newPassword: '', confirmPassword: '' }
   });
-    setError('');
-    setSuccess('');
+
+  // Step 1: Request security question for email
   const handleRequestReset = async (data) => {
     setError('');
     setSuccess('');
@@ -96,7 +90,7 @@ const securityResetSchema = z.object({
               </div>
               <div className="feature">
                 <span className="feature-icon">✓</span>
-                <span>6-digit reset code</span>
+                <span>Security question verification</span>
               </div>
               <div className="feature">
                 <span className="feature-icon">✓</span>
@@ -125,7 +119,7 @@ const securityResetSchema = z.object({
             <>
               <div className="form-header">
                 <h2>Forgot password?</h2>
-                <p>Enter your email to receive a reset code</p>
+                <p>Enter your registered email to answer your security question</p>
               </div>
 
               {error && (
@@ -164,7 +158,7 @@ const securityResetSchema = z.object({
                 </div>
 
                 <button type="submit" className="btn-submit" disabled={emailForm.formState.isSubmitting}>
-                  {emailForm.formState.isSubmitting ? 'Sending...' : 'Send Reset Code'}
+                  {emailForm.formState.isSubmitting ? 'Looking up...' : 'Continue'}
                 </button>
 
                 <p className="form-footer">
