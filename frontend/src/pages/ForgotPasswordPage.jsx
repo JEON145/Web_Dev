@@ -176,7 +176,7 @@ export default function ForgotPasswordPage() {
             <>
               <div className="form-header">
                 <h2>Reset password</h2>
-                <p>Enter the code sent to {email}</p>
+                <p>Answer your security question for <strong>{email}</strong></p>
               </div>
 
               {error && (
@@ -200,18 +200,24 @@ export default function ForgotPasswordPage() {
               )}
 
               <form onSubmit={resetForm.handleSubmit(handleResetPassword)}>
+                {securityQuestion && (
+                  <div className="input-group">
+                    <label>Security Question</label>
+                    <p style={{ fontWeight: '600', color: 'var(--text-primary, #1a1a2e)', padding: '8px 0' }}>{securityQuestion}</p>
+                  </div>
+                )}
+
                 <div className="input-group">
-                  <label htmlFor="resetCode">Reset Code</label>
+                  <label htmlFor="securityAnswer">Your Answer</label>
                   <input
-                    id="resetCode"
+                    id="securityAnswer"
                     type="text"
-                    placeholder="Enter 6-digit code"
-                    {...resetForm.register('resetCode')}
-                    maxLength={6}
-                    className={resetForm.formState.errors.resetCode ? 'error' : ''}
+                    placeholder="Enter your security answer"
+                    {...resetForm.register('securityAnswer')}
+                    className={resetForm.formState.errors.securityAnswer ? 'error' : ''}
                   />
-                  {resetForm.formState.errors.resetCode && (
-                    <span className="input-error-text">{resetForm.formState.errors.resetCode.message}</span>
+                  {resetForm.formState.errors.securityAnswer && (
+                    <span className="input-error-text">{resetForm.formState.errors.securityAnswer.message}</span>
                   )}
                 </div>
 
