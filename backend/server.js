@@ -37,7 +37,7 @@ app.post('/api/register', async (req, res) => {
     const hashedAnswer = securityAnswer ? await bcrypt.hash(securityAnswer, 10) : null;
 
     await pool.query(
-      'INSERT INTO users (username, password, email, role, shop_name, security_question, security_answer) VALUES ($1, $2, $3, $4, $5, $6, $7)', 
+      'INSERT INTO users (username, password, email, role, shop_name, security_question, security_answer) VALUES ($1, $2, $3, $4, $5, $6, $7)',
       [username, hashedPassword, email || null, userRole, shopName || username, securityQuestion || null, hashedAnswer]
     );
     res.status(201).json({ message: "User created successfully" });
@@ -57,10 +57,18 @@ app.post('/api/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: "Invalid password" });
 
+    if (user.is_banned) {
+      return res.status(403).json({ error: "Your account has been banned. Please contact support." });
+    }
+
+    if (!user.is_approved) {
+      return res.status(403).json({ error: "Your account is pending admin approval." });
+    }
+
     const token = jwt.sign(
-      { id: user.id, role: user.role }, 
-      process.env.JWT_SECRET, 
-      { expiresIn: '24h' }
+      { id: user.id, username: user.username, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
     );
 
     res.json({
@@ -84,10 +92,10 @@ app.post('/api/forgot-password', async (req, res) => {
 
 app.post('/api/reset-password', async (req, res) => {
   const { email, resetCode, newPassword } = req.body;
-  
+
   try {
     const storedData = resetCodes.get(email);
-    
+
     if (!storedData) {
       return res.status(400).json({ error: "No reset code found. Please request a new one." });
     }
@@ -104,7 +112,7 @@ app.post('/api/reset-password', async (req, res) => {
     // Hash the new password and update
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, storedData.userId]);
-    
+
     // Clean up the used code
     resetCodes.delete(email);
 
@@ -134,6 +142,15 @@ app.get('/api/security-question', async (req, res) => {
   }
 });
 
+// Middleware to verify Admin role
+const verifyAdmin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    res.status(403).json({ error: "Access denied. Admin privileges required." });
+  }
+};
+
 // New endpoint: reset password by verifying security answer
 app.post('/api/reset-password-security', async (req, res) => {
   const { email, securityAnswer, newPassword } = req.body;
@@ -162,9 +179,16 @@ app.post('/api/reset-password-security', async (req, res) => {
 // --- INVENTORY ROUTES ---
 
 app.get('/api/items', verifyToken, async (req, res) => {
-  const userId = req.user.id; 
+  const userId = req.user.id;
   try {
-    const result = await pool.query('SELECT * FROM items WHERE user_id = $1 ORDER BY id DESC', [userId]);
+    const result = await pool.query(`
+      SELECT i.*, c.name as category_name, c.unit 
+      FROM items i 
+      LEFT JOIN categories c ON i.category_id = c.id 
+      WHERE i.user_id = $1 
+      ORDER BY i.id DESC`,
+      [userId]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: "Could not fetch items" });
@@ -173,18 +197,35 @@ app.get('/api/items', verifyToken, async (req, res) => {
 
 // Add item with optional image upload
 app.post('/api/items', verifyToken, upload.single('itemImage'), async (req, res) => {
-  const { name, quantity } = req.body;
+  const { name, quantity, isPublic, category_id } = req.body;
   const userId = req.user.id;
-  
+
   // If a file was uploaded, save its path. If not, use null.
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   try {
     const result = await pool.query(
-      'INSERT INTO items (item_name, quantity, user_id, item_image) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, parseInt(quantity), userId, imageUrl]
+      'INSERT INTO items (item_name, quantity, user_id, item_image, is_public, category_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, parseInt(quantity), userId, imageUrl, isPublic === 'true' || isPublic === true, category_id || null]
     );
     res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Toggle item marketplace visibility
+app.patch('/api/items/:id/toggle-public', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { isPublic } = req.body;
+  const userId = req.user.id;
+  try {
+    const result = await pool.query(
+      'UPDATE items SET is_public = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [isPublic, id, userId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: "Item not found or unauthorized" });
+    res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -202,66 +243,230 @@ app.delete('/api/items/:id', verifyToken, async (req, res) => {
   }
 });
 
+// --- MARKETPLACE ROUTES ---
+
+app.get('/api/marketplace', verifyToken, async (req, res) => {
+  const myId = req.user.id;
+  try {
+    const result = await pool.query(
+      `SELECT i.*, u.username as owner_name, u.shop_name, c.name as category_name, c.unit 
+       FROM items i 
+       JOIN users u ON i.user_id = u.id 
+       LEFT JOIN categories c ON i.category_id = c.id
+       WHERE i.is_public = true AND i.user_id != $1
+       ORDER BY i.id DESC`,
+      [myId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Could not fetch marketplace" });
+  }
+});
+
 // --- HELPING HAND / REQUEST ROUTES ---
 
-// 1. Post a request for help
+// 1. Post a request (General broadcast or Targeted)
 app.post('/api/requests', verifyToken, async (req, res) => {
-  const { item_name, quantity } = req.body;
+  const { item_name, quantity, receiver_id } = req.body;
   const senderId = req.user.id;
   try {
     const result = await pool.query(
-      'INSERT INTO requests (sender_id, item_name, quantity, status) VALUES ($1, $2, $3, $4) RETURNING *',
-      [senderId, item_name, parseInt(quantity), 'open']
+      'INSERT INTO requests (sender_id, receiver_id, item_name, quantity, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [senderId, receiver_id || null, item_name, parseInt(quantity), 'pending']
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    console.error("Post Request Error:", err);
     res.status(500).json({ error: "Failed to post request" });
   }
 });
 
-// 2. Get the Community Board (Requests from others)
-app.get('/api/requests/community', verifyToken, async (req, res) => {
+// 2. Get Outgoing Requests (Requests I sent)
+app.get('/api/requests/outgoing', verifyToken, async (req, res) => {
   const myId = req.user.id;
   try {
     const result = await pool.query(
-      `SELECT r.*, u.username as shop_name 
+      `SELECT r.*, u.username as receiver_name, u.shop_name as receiver_shop 
        FROM requests r 
-       JOIN users u ON r.sender_id = u.id 
-       WHERE r.status = 'open' AND r.sender_id != $1
+       LEFT JOIN users u ON r.receiver_id = u.id 
+       WHERE r.sender_id = $1
        ORDER BY r.created_at DESC`,
       [myId]
     );
     res.json(result.rows);
   } catch (err) {
-    res.status(500).json({ error: "Could not fetch community board" });
+    res.status(500).json({ error: "Could not fetch outgoing requests" });
   }
 });
 
-// 3. Fulfill a request (The "I can help" logic)
-// --- HELPING HAND / FULFILL ROUTE ---
-
-app.put('/api/requests/:id/fulfill', verifyToken, async (req, res) => {
-  const { id } = req.params;
-  
+// 3. Get Incoming Requests (Requests sent to me or broadcasted)
+app.get('/api/requests/incoming', verifyToken, async (req, res) => {
+  const myId = req.user.id;
   try {
-    // This updates the status to 'fulfilled' so it disappears from the 'Open' board
     const result = await pool.query(
-      "UPDATE requests SET status = 'fulfilled' WHERE id = $1 RETURNING *",
-      [id]
+      `SELECT r.*, u.username as sender_name, u.shop_name as sender_shop 
+       FROM requests r 
+       JOIN users u ON r.sender_id = u.id 
+       WHERE (r.receiver_id = $1 OR (r.receiver_id IS NULL AND r.sender_id != $1))
+       AND r.status = 'pending'
+       ORDER BY r.created_at DESC`,
+      [myId]
     );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Could not fetch incoming requests" });
+  }
+});
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Request not found" });
+// 4. Update Request Status (Accept, Decline, Ship, Receive)
+app.patch('/api/requests/:id/status', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // e.g., 'accepted', 'declined', 'shipped', 'received'
+  const userId = req.user.id;
+
+  try {
+    // Basic validation: must be either sender or receiver to update status
+    const reqInfo = await pool.query('SELECT * FROM requests WHERE id = $1', [id]);
+    if (reqInfo.rowCount === 0) return res.status(404).json({ error: "Request not found" });
+
+    const request = reqInfo.rows[0];
+    const isSender = request.sender_id === userId;
+    const isReceiver = request.receiver_id === userId || (request.receiver_id === null && status === 'accepted');
+
+    if (!isSender && !isReceiver) {
+      return res.status(403).json({ error: "Unauthorized to update this request" });
     }
 
-    res.json({ message: "Thank you for helping!" });
+    // If it was a broadcast request and someone accepted it, assign them as receiver
+    let query = "UPDATE requests SET status = $1 WHERE id = $2 RETURNING *";
+    let params = [status, id];
+
+    if (request.receiver_id === null && status === 'accepted') {
+      query = "UPDATE requests SET status = $1, receiver_id = $3 WHERE id = $2 RETURNING *";
+      params = [status, id, userId];
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error("Fulfill Error:", err.message);
-    res.status(500).json({ error: "Server error during fulfillment" });
+    console.error("Status Update Error:", err);
+    res.status(500).json({ error: "Failed to update request status" });
+  }
+});
+
+// Deprecated fulfill route
+app.put('/api/requests/:id/fulfill', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      "UPDATE requests SET status = 'accepted', receiver_id = $1 WHERE id = $2 RETURNING *",
+      [req.user.id, id]
+    );
+    res.json({ message: "Updated to accepted" });
+  } catch (err) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// --- ADMIN ROUTES ---
+
+// 1. Get All Users
+app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, username, email, role, shop_name, is_approved, is_banned FROM users ORDER BY id ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+// 2. Update User Status (Approve, Ban, Change Role)
+app.patch('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { is_approved, is_banned, role } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE users SET is_approved = COALESCE($1, is_approved), is_banned = COALESCE($2, is_banned), role = COALESCE($3, role) WHERE id = $4 RETURNING id, username, is_approved, is_banned, role',
+      [is_approved, is_banned, role, id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+// 3. Global Inventory Summary
+app.get('/api/admin/inventory/summary', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT COALESCE(c.name, 'Uncategorized') as category, SUM(i.quantity) as total_quantity, COUNT(i.id) as item_count
+      FROM items i
+      LEFT JOIN categories c ON i.category_id = c.id
+      GROUP BY c.name
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch global inventory" });
+  }
+});
+
+// 4. Master Audit Logs (All Requests)
+app.get('/api/admin/logs/requests', verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.*, s.username as sender_name, s.shop_name as sender_shop, 
+             v.username as receiver_name, v.shop_name as receiver_shop
+      FROM requests r
+      JOIN users s ON r.sender_id = s.id
+      LEFT JOIN users v ON r.receiver_id = v.id
+      ORDER BY r.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch audit logs" });
+  }
+});
+
+// --- CATEGORY & UNIT MANAGEMENT ---
+
+app.get('/api/categories', verifyToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM categories ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch categories" });
+  }
+});
+
+app.post('/api/categories', verifyToken, verifyAdmin, async (req, res) => {
+  const { name, unit } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO categories (name, unit) VALUES ($1, $2) RETURNING *',
+      [name, unit]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to create category" });
+  }
+});
+
+// Update item to include category_id
+app.patch('/api/items/:id/category', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { category_id } = req.body;
+  try {
+    const result = await pool.query(
+      'UPDATE items SET category_id = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [category_id, id, req.user.id]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update item category" });
   }
 });
 
 // Serve uploaded images
-app.use('/uploads', express.static('uploads')); 
+app.use('/uploads', express.static('uploads'));
 
 app.listen(5000, () => console.log('🚀 Server running on http://localhost:5000'));

@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import API from '../api/axiosConfig';
 import '../styles/Dashboard.css';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import NetworkPage from './NetworkPage'; 
-
+import NetworkPage from './NetworkPage';
+import MarketplacePage from './MarketplacePage';
+import RequestsManager from './RequestsManager';
+import AdminDashboard from './AdminDashboard';
 export default function DashboardPage({ user, setUser }) {
   const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
   const navigate = useNavigate();
   const location = useLocation();
-  
+
   const [newItemName, setNewItemName] = useState('');
   const [newItemQuantity, setNewItemQuantity] = useState('');
   const [itemImage, setItemImage] = useState(null);
@@ -21,12 +24,22 @@ export default function DashboardPage({ user, setUser }) {
       const res = await API.get('/items');
       setItems(res.data);
     } catch (err) {
-      console.error("Fetch failed", err);
+      console.error('Fetch items error:', err);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await API.get('/categories');
+      setCategories(res.data);
+    } catch (err) {
+      console.error('Fetch categories error:', err);
     }
   };
 
   useEffect(() => {
     fetchItems();
+    fetchCategories();
   }, []);
 
   const handleImageChange = (e) => {
@@ -49,6 +62,9 @@ export default function DashboardPage({ user, setUser }) {
       const formData = new FormData();
       formData.append('name', newItemName);
       formData.append('quantity', newItemQuantity);
+      if (newItemCategoryId) {
+        formData.append('category_id', newItemCategoryId);
+      }
       if (itemImage) {
         formData.append('itemImage', itemImage);
       }
@@ -58,9 +74,10 @@ export default function DashboardPage({ user, setUser }) {
           'Content-Type': 'multipart/form-data',
         },
       });
-      
+
       setNewItemName('');
       setNewItemQuantity('');
+      setNewItemCategoryId('');
       setItemImage(null);
       setImagePreview(null);
       fetchItems();
@@ -89,30 +106,60 @@ export default function DashboardPage({ user, setUser }) {
   };
 
   const menuItems = [
-    { id: 'overview', label: 'Overview', path: '/dashboard', icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-      </svg>
-    )},
-    { id: 'inventory', label: 'Inventory', path: '/dashboard/inventory', icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
-      </svg>
-    )},
-    { id: 'alerts', label: 'Alerts', path: '/dashboard/alerts', icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>
-    )},
-    { id: 'network', label: 'Network', path: '/dashboard/network', icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
-      </svg>
-    )}
+    {
+      id: 'overview', label: 'Overview', path: '/dashboard', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+        </svg>
+      )
+    },
+    {
+      id: 'inventory', label: 'Inventory', path: '/dashboard/inventory', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+      )
+    },
+    {
+      id: 'alerts', label: 'Alerts', path: '/dashboard/alerts', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      )
+    },
+    {
+      id: 'network', label: 'Network', path: '/dashboard/network', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 00-3-3.87" /><path d="M16 3.13a4 4 0 010 7.75" />
+        </svg>
+      )
+    },
+    {
+      id: 'marketplace', label: 'Marketplace', path: '/dashboard/marketplace', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+          <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" />
+        </svg>
+      )
+    },
+    {
+      id: 'requests', label: 'Requests', path: '/dashboard/requests', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M15 10l-4 4l6 6l4-16l-18 7l4 2l2 6l3-4" />
+        </svg>
+      )
+    },
+    ...(user?.role === 'admin' ? [{
+      id: 'admin', label: 'Admin Panel', path: '/dashboard/admin', icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+      )
+    }] : [])
   ];
 
   return (
@@ -121,12 +168,12 @@ export default function DashboardPage({ user, setUser }) {
       <aside className="sidebar">
         <div className="sidebar-brand">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
-            <path d="M9 22V12h6v10"/>
+            <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            <path d="M9 22V12h6v10" />
           </svg>
           <span>StockLogix</span>
         </div>
-        
+
         <nav className="sidebar-nav">
           {menuItems.map(item => (
             <button
@@ -139,13 +186,13 @@ export default function DashboardPage({ user, setUser }) {
             </button>
           ))}
         </nav>
-        
+
         <div className="sidebar-footer">
           <button className="nav-item logout" onClick={handleLogout}>
             <span className="nav-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-                <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                <polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
               </svg>
             </span>
             <span className="nav-label">Logout</span>
@@ -163,7 +210,7 @@ export default function DashboardPage({ user, setUser }) {
           <div className="header-right">
             <div className="search-box">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input type="text" placeholder="Search..." />
             </div>
@@ -187,7 +234,7 @@ export default function DashboardPage({ user, setUser }) {
                   <div className="stat-card">
                     <div className="stat-icon">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                        <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
                       </svg>
                     </div>
                     <div className="stat-content">
@@ -198,8 +245,8 @@ export default function DashboardPage({ user, setUser }) {
                   <div className="stat-card warning">
                     <div className="stat-icon">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
                       </svg>
                     </div>
                     <div className="stat-content">
@@ -225,9 +272,18 @@ export default function DashboardPage({ user, setUser }) {
                           <input type="number" value={newItemQuantity} onChange={(e) => setNewItemQuantity(e.target.value)} placeholder="Enter quantity" required />
                         </div>
                         <div className="form-field">
+                          <label>Category</label>
+                          <select value={newItemCategoryId} onChange={(e) => setNewItemCategoryId(e.target.value)} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+                            <option value="">Uncategorized</option>
+                            {categories.map(cat => (
+                              <option key={cat.id} value={cat.id}>{cat.name} ({cat.unit})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-field">
                           <label>Item Photo (Optional)</label>
-                          <input 
-                            type="file" 
+                          <input
+                            type="file"
                             accept="image/jpeg,image/jpg,image/png"
                             onChange={handleImageChange}
                             className="file-input"
@@ -235,8 +291,8 @@ export default function DashboardPage({ user, setUser }) {
                           {imagePreview && (
                             <div className="image-preview">
                               <img src={imagePreview} alt="Preview" />
-                              <button 
-                                type="button" 
+                              <button
+                                type="button"
                                 className="btn-remove"
                                 onClick={() => { setItemImage(null); setImagePreview(null); }}
                               >
@@ -258,7 +314,7 @@ export default function DashboardPage({ user, setUser }) {
                     <div className="table-wrap">
                       <table>
                         <thead>
-                          <tr><th>Photo</th><th>Item</th><th>Qty</th><th>Status</th></tr>
+                          <tr><th>Photo</th><th>Item</th><th>Category</th><th>Qty</th><th>Status</th><th>Market</th></tr>
                         </thead>
                         <tbody>
                           {items.map(item => (
@@ -269,14 +325,28 @@ export default function DashboardPage({ user, setUser }) {
                                 ) : (
                                   <div className="thumb-placeholder">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                                      <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
                                     </svg>
                                   </div>
                                 )}
                               </td>
                               <td className="item-name">{item.item_name || item.name}</td>
-                              <td>{item.quantity}</td>
+                              <td><span className="badge secondary">{item.category_name || 'General'}</span></td>
+                              <td>{item.quantity} {item.unit}</td>
                               <td><span className={`badge ${item.quantity < 5 ? 'danger' : 'success'}`}>{item.quantity < 5 ? 'Low' : 'Good'}</span></td>
+                              <td>
+                                <input
+                                  type="checkbox"
+                                  disabled={!isOwner}
+                                  checked={item.is_public}
+                                  onChange={async (e) => {
+                                    try {
+                                      await API.patch(`/items/${item.id}/toggle-public`, { isPublic: e.target.checked });
+                                      fetchItems();
+                                    } catch (err) { alert("Failed to update visibility"); }
+                                  }}
+                                />
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -296,7 +366,7 @@ export default function DashboardPage({ user, setUser }) {
                 <div className="table-wrap">
                   <table>
                     <thead>
-                      <tr><th>Photo</th><th>Item</th><th>Qty</th><th>Status</th>{isOwner && <th>Action</th>}</tr>
+                      <tr><th>Photo</th><th>Item</th><th>Category</th><th>Qty</th><th>Status</th><th>Market</th>{isOwner && <th>Action</th>}</tr>
                     </thead>
                     <tbody>
                       {items.map(item => (
@@ -307,19 +377,33 @@ export default function DashboardPage({ user, setUser }) {
                             ) : (
                               <div className="thumb-placeholder">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
+                                  <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
                                 </svg>
                               </div>
                             )}
                           </td>
                           <td className="item-name">{item.item_name || item.name}</td>
-                          <td>{item.quantity}</td>
+                          <td><span className="badge secondary">{item.category_name || 'General'}</span></td>
+                          <td>{item.quantity} {item.unit}</td>
                           <td><span className={`badge ${item.quantity < 5 ? 'danger' : 'success'}`}>{item.quantity < 5 ? 'Low' : 'Good'}</span></td>
+                          <td>
+                            <input
+                              type="checkbox"
+                              disabled={!isOwner}
+                              checked={item.is_public}
+                              onChange={async (e) => {
+                                try {
+                                  await API.patch(`/items/${item.id}/toggle-public`, { isPublic: e.target.checked });
+                                  fetchItems();
+                                } catch (err) { alert("Failed to update visibility"); }
+                              }}
+                            />
+                          </td>
                           {isOwner && (
                             <td>
                               <button onClick={() => handleDeleteItem(item.id)} className="btn-delete">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                  <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                                 </svg>
                               </button>
                             </td>
@@ -342,8 +426,8 @@ export default function DashboardPage({ user, setUser }) {
                   {items.filter(i => i.quantity < 5).length === 0 ? (
                     <div className="empty-state">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-                        <polyline points="22 4 12 14.01 9 11.01"/>
+                        <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                        <polyline points="22 4 12 14.01 9 11.01" />
                       </svg>
                       <p>All stock levels are healthy</p>
                     </div>
@@ -352,8 +436,8 @@ export default function DashboardPage({ user, setUser }) {
                       <div key={item.id} className="alert-item">
                         <div className="alert-icon">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                            <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
                           </svg>
                         </div>
                         <div className="alert-content">
@@ -369,7 +453,18 @@ export default function DashboardPage({ user, setUser }) {
 
             {/* Network Route */}
             <Route path="network" element={<NetworkPage />} />
-            
+
+            {/* Marketplace Route */}
+            <Route path="marketplace" element={<MarketplacePage user={user} />} />
+
+            {/* Requests Route */}
+            <Route path="requests" element={<RequestsManager user={user} />} />
+
+            {/* Admin Route */}
+            {user?.role === 'admin' && (
+              <Route path="admin" element={<AdminDashboard />} />
+            )}
+
           </Routes>
         </div>
       </main>
