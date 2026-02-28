@@ -57,7 +57,7 @@ export default function MarketplacePage({ user }) {
             ) : (
                 <div className="marketplace-grid">
                     {items.map(item => (
-                        <div key={item.id} className="card marketplace-item">
+                        <div key={item.id} className={`card marketplace-item ${item.is_verified ? 'verified' : ''}`}>
                             <div className="item-image-wrapper">
                                 {item.item_image ? (
                                     <img src={`http://localhost:5000${item.item_image}`} alt={item.item_name} className="market-img" />
@@ -67,9 +67,20 @@ export default function MarketplacePage({ user }) {
                             </div>
                             <div className="item-details">
                                 <h4>{item.item_name}</h4>
-                                <p className="shop-info">Store: <strong>{item.shop_name || item.owner_name}</strong></p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                    <p className="shop-info" style={{ margin: 0 }}>Store: <strong>{item.shop_name || item.owner_name}</strong></p>
+                                    {item.is_verified && (
+                                        <div className="badge-verified" style={{ padding: '2px 8px', fontSize: '0.65rem' }}>
+                                            <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" /></svg>
+                                            Verified
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="trade-score-pill" style={{ marginBottom: '12px', padding: '2px 8px', fontSize: '0.75rem' }}>
+                                    <b>{item.trade_count || 0}</b> Successful Trades
+                                </div>
                                 <div className="stock-info">
-                                    <span className="qty">Stock: {item.quantity}</span>
+                                    <span className="qty" style={{ fontSize: '0.9rem', color: '#64748b' }}>Stock: {item.quantity}</span>
                                     <button className="btn-primary btn-sm" onClick={() => handleRequest(item)}>Request</button>
                                 </div>
                             </div>

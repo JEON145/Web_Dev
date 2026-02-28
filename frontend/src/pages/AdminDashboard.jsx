@@ -47,7 +47,7 @@ export default function AdminDashboard() {
     const handleAddCategory = async (e) => {
         e.preventDefault();
         try {
-            await API.post('/admin/categories', newCategory);
+            await API.post('/categories', newCategory);
             setNewCategory({ name: '', unit: '' });
             alert("Category added!");
             fetchData();
@@ -79,6 +79,7 @@ export default function AdminDashboard() {
                                     <th>Username</th>
                                     <th>Shop Name</th>
                                     <th>Role</th>
+                                    <th>Trade Count</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
@@ -90,12 +91,29 @@ export default function AdminDashboard() {
                                         <td>{u.shop_name}</td>
                                         <td><span className={`badge ${u.role === 'admin' ? 'primary' : 'secondary'}`}>{u.role}</span></td>
                                         <td>
-                                            {u.is_banned ? <span className="badge danger">Banned</span> :
-                                                u.is_approved ? <span className="badge success">Approved</span> :
-                                                    <span className="badge warning">Pending</span>}
+                                            <div className="trade-score-pill">
+                                                <b>{u.trade_count || 0}</b> Fulfills
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {u.is_banned ? <span className="badge danger">Banned</span> :
+                                                    u.is_approved ? <span className="badge success">Approved</span> :
+                                                        <span className="badge warning">Pending Approval</span>}
+                                                {u.is_verified && <span className="badge info" style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>VERIFIED</span>}
+                                            </div>
                                         </td>
                                         <td className="actions-cell">
                                             {!u.is_approved && <button className="btn-success btn-sm" onClick={() => handleUserAction(u.id, 'is_approved', true)}>Approve</button>}
+                                            {u.is_approved && !u.is_banned && (
+                                                <button
+                                                    className={`btn-sm ${u.is_verified ? 'btn-secondary' : 'btn-info'}`}
+                                                    onClick={() => handleUserAction(u.id, 'is_verified', !u.is_verified)}
+                                                    style={{ background: u.is_verified ? '#64748b' : '#3b82f6' }}
+                                                >
+                                                    {u.is_verified ? 'Unverify' : 'Verify Merchant'}
+                                                </button>
+                                            )}
                                             <button className={`btn-sm ${u.is_banned ? 'btn-success' : 'btn-danger'}`} onClick={() => handleUserAction(u.id, 'is_banned', !u.is_banned)}>
                                                 {u.is_banned ? 'Unban' : 'Ban'}
                                             </button>

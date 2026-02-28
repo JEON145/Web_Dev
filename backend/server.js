@@ -182,8 +182,11 @@ app.get('/api/items', verifyToken, async (req, res) => {
   const userId = req.user.id;
   try {
     const result = await pool.query(`
-      SELECT i.*, c.name as category_name, c.unit 
+      SELECT i.*, u.shop_name, u.is_verified, 
+             (SELECT COUNT(*) FROM requests r WHERE r.receiver_id = u.id AND r.status = 'received') as trade_count,
+             c.name as category_name, c.unit 
       FROM items i 
+      JOIN users u ON i.user_id = u.id
       LEFT JOIN categories c ON i.category_id = c.id 
       WHERE i.user_id = $1 
       ORDER BY i.id DESC`,
@@ -195,18 +198,19 @@ app.get('/api/items', verifyToken, async (req, res) => {
   }
 });
 
-// Add item with optional image upload
-app.post('/api/items', verifyToken, upload.single('itemImage'), async (req, res) => {
-  const { name, quantity, isPublic, category_id } = req.body;
+// Add item with strict gallery selection (no file upload)
+app.post('/api/items', verifyToken, async (req, res) => {
+  const { name, quantity, isPublic, category_id, existingImagePath } = req.body;
   const userId = req.user.id;
 
-  // If a file was uploaded, save its path. If not, use null.
-  const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+  if (!existingImagePath) {
+    return res.status(400).json({ error: "Image must be selected from the gallery." });
+  }
 
   try {
     const result = await pool.query(
       'INSERT INTO items (item_name, quantity, user_id, item_image, is_public, category_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [name, parseInt(quantity), userId, imageUrl, isPublic === 'true' || isPublic === true, category_id || null]
+      [name, parseInt(quantity), userId, existingImagePath, isPublic === 'true' || isPublic === true, category_id || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -249,7 +253,9 @@ app.get('/api/marketplace', verifyToken, async (req, res) => {
   const myId = req.user.id;
   try {
     const result = await pool.query(
-      `SELECT i.*, u.username as owner_name, u.shop_name, c.name as category_name, c.unit 
+      `SELECT i.*, u.username as owner_name, u.shop_name, u.is_verified,
+             (SELECT COUNT(*) FROM requests r WHERE r.receiver_id = u.id AND r.status = 'received') as trade_count,
+             c.name as category_name, c.unit 
        FROM items i 
        JOIN users u ON i.user_id = u.id 
        LEFT JOIN categories c ON i.category_id = c.id
@@ -370,24 +376,29 @@ app.put('/api/requests/:id/fulfill', verifyToken, async (req, res) => {
 
 // --- ADMIN ROUTES ---
 
-// 1. Get All Users
+// 1. Get All Users (with Verification and Trade Stats)
 app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, username, email, role, shop_name, is_approved, is_banned FROM users ORDER BY id ASC');
+    const result = await pool.query(`
+      SELECT u.id, u.username, u.email, u.role, u.shop_name, u.is_approved, u.is_banned, u.is_verified,
+             (SELECT COUNT(*) FROM requests r WHERE r.receiver_id = u.id AND r.status = 'received') as trade_count
+      FROM users u
+      ORDER BY u.id ASC
+    `);
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch users" });
   }
 });
 
-// 2. Update User Status (Approve, Ban, Change Role)
+// 2. Update User Status (Approve, Ban, Verify, Change Role)
 app.patch('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => {
   const { id } = req.params;
-  const { is_approved, is_banned, role } = req.body;
+  const { is_approved, is_banned, is_verified, role } = req.body;
   try {
     const result = await pool.query(
-      'UPDATE users SET is_approved = COALESCE($1, is_approved), is_banned = COALESCE($2, is_banned), role = COALESCE($3, role) WHERE id = $4 RETURNING id, username, is_approved, is_banned, role',
-      [is_approved, is_banned, role, id]
+      'UPDATE users SET is_approved = COALESCE($1, is_approved), is_banned = COALESCE($2, is_banned), is_verified = COALESCE($3, is_verified), role = COALESCE($4, role) WHERE id = $5 RETURNING id, username, is_approved, is_banned, is_verified, role',
+      [is_approved, is_banned, is_verified, role, id]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -395,14 +406,16 @@ app.patch('/api/admin/users/:id', verifyToken, verifyAdmin, async (req, res) => 
   }
 });
 
-// 3. Global Inventory Summary
+// 3. Global Inventory Summary (with Verification info)
 app.get('/api/admin/inventory/summary', verifyToken, verifyAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT COALESCE(c.name, 'Uncategorized') as category, SUM(i.quantity) as total_quantity, COUNT(i.id) as item_count
+      SELECT i.*, u.shop_name, u.username as owner_name, u.is_verified,
+             COALESCE(c.name, 'Uncategorized') as category_name, c.unit
       FROM items i
+      JOIN users u ON i.user_id = u.id
       LEFT JOIN categories c ON i.category_id = c.id
-      GROUP BY c.name
+      ORDER BY c.name, i.item_name
     `);
     res.json(result.rows);
   } catch (err) {
@@ -448,6 +461,23 @@ app.post('/api/categories', verifyToken, verifyAdmin, async (req, res) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: "Failed to create category" });
+  }
+});
+
+// --- GALLERY ROUTES ---
+
+// List all uploaded images
+app.get('/api/uploads', verifyToken, async (req, res) => {
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  const fs = await import('fs/promises');
+  try {
+    const files = await fs.readdir(uploadsDir);
+    // Filter for images only
+    const images = files.filter(file => /\.(jpg|jpeg|png|gif|webp)$/i.test(file));
+    res.json(images.map(filename => `/uploads/${filename}`));
+  } catch (err) {
+    console.error("Gallery Fetch Error:", err);
+    res.status(500).json({ error: "Could not fetch gallery images" });
   }
 });
 
