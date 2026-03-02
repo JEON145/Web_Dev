@@ -7,12 +7,25 @@ import dotenv from 'dotenv';
 import upload from './middleware/upload.js';
 import path from 'path';
 import crypto from 'crypto';
+import { z } from 'zod';
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+
+// --- Zod Schemas ---
+const registerSchema = z.object({
+  username: z.string().min(3).regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  password: z.string().min(6).regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, "Password must contain at least one uppercase letter, one lowercase letter, and one number"),
+  email: z.string().email(),
+  role: z.enum(['user', 'admin']).default('user'),
+  shopName: z.string().min(2),
+  securityQuestion: z.string().min(5),
+  securityAnswer: z.string().min(2),
+});
 
 // --- JWT Middleware ---
 const verifyToken = (req, res, next) => {
@@ -29,8 +42,11 @@ const verifyToken = (req, res, next) => {
 // --- AUTH ROUTES ---
 
 app.post('/api/register', async (req, res) => {
-  const { username, password, email, role, shopName, securityQuestion, securityAnswer } = req.body;
   try {
+    // Validate request body
+    const validatedData = registerSchema.parse(req.body);
+    const { username, password, email, role, shopName, securityQuestion, securityAnswer } = validatedData;
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const userRole = role === 'admin' ? 'admin' : 'user';
     // Hash security answer if provided
@@ -42,6 +58,9 @@ app.post('/api/register', async (req, res) => {
     );
     res.status(201).json({ message: "User created successfully" });
   } catch (err) {
+    if (err instanceof z.ZodError) {
+      return res.status(400).json({ error: err.errors[0].message });
+    }
     console.error("Registration error:", err);
     res.status(500).json({ error: "Registration failed. Username or email may already exist." });
   }
