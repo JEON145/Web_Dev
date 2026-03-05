@@ -1385,13 +1385,13 @@
 .btn-help {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
+  gap: 4px;
+  padding: 6px 12px;
   background: #0f3d3e;
   color: #fff;
   border: none;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
@@ -1402,8 +1402,8 @@
 }
 
 .btn-help svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 @media (max-width: 600px) {
