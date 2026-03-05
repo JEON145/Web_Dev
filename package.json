@@ -7,5 +7,8 @@
     "dev:backend": "cd backend && npm run dev",
     "install:all": "cd frontend && npm install && cd ../backend && npm install",
     "build": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
   }
 }

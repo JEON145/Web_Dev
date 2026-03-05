@@ -12,6 +12,7 @@ export default function DashboardPage({ user, setUser }) {
   const [categories, setCategories] = useState([]);
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [outgoingRequests, setOutgoingRequests] = useState([]);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const activeTab = location.pathname === '/dashboard' ? 'overview' : location.pathname.split('/').pop();
@@ -293,12 +294,15 @@ export default function DashboardPage({ user, setUser }) {
 
   return (
     <div className="dashboard">
-      <nav className={`sidebar ${user?.role === 'admin' ? 'admin' : 'user'}`}>
+      {/* Mobile menu overlay */}
+      {mobileMenuOpen && <div className="mobile-overlay" onClick={() => setMobileMenuOpen(false)} />}
+      
+      <nav className={`sidebar ${user?.role === 'admin' ? 'admin' : 'user'} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-brand">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
           </svg>
-          <span>STOCKSAGE</span>
+          <span>Inventory Tracker</span>
         </div>
         <div className="sidebar-nav">
           {menuItems.map(item => (
@@ -308,6 +312,7 @@ export default function DashboardPage({ user, setUser }) {
               onClick={() => {
                 const path = item.path || `/dashboard/${item.id}`;
                 navigate(path);
+                setMobileMenuOpen(false);
               }}
             >
               <span className="nav-icon">{item.icon}</span>
@@ -330,6 +335,20 @@ export default function DashboardPage({ user, setUser }) {
       <main className="main">
         <header className="header">
           <div className="header-left">
+            {/* Mobile hamburger button */}
+            <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {mobileMenuOpen ? (
+                  <path d="M6 18L18 6M6 6l12 12" />
+                ) : (
+                  <>
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </>
+                )}
+              </svg>
+            </button>
             <h2>
               {isAdmin ? "Admin Dashboard" : `${user?.username}'s StockSage`}
               {isAdmin && <span className="admin-badge">Admin Mode</span>}

@@ -191,7 +191,7 @@ html, body, #root {
 
 /* Input Groups */
 .input-group {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .input-group label {
@@ -199,15 +199,16 @@ html, body, #root {
   font-size: 0.875rem;
   font-weight: 500;
   color: #374151;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .input-group input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 1rem;
+  line-height: 1.5;
   color: #1a1a2e;
   background: #fff;
   transition: border-color 0.2s, box-shadow 0.2s;

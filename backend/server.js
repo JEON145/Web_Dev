@@ -51,12 +51,20 @@ app.post('/api/register', async (req, res) => {
     const userRole = role === 'admin' ? 'admin' : 'user';
     // Hash security answer if provided
     const hashedAnswer = securityAnswer ? await bcrypt.hash(securityAnswer, 10) : null;
+    
+    // Regular users are auto-approved. Admin accounts require approval via pgAdmin.
+    const isApproved = userRole === 'user';
 
     await pool.query(
-      'INSERT INTO users (username, password, email, role, shop_name, security_question, security_answer) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [username, hashedPassword, email || null, userRole, shopName || username, securityQuestion || null, hashedAnswer]
+      'INSERT INTO users (username, password, email, role, shop_name, security_question, security_answer, is_approved) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      [username, hashedPassword, email || null, userRole, shopName || username, securityQuestion || null, hashedAnswer, isApproved]
     );
-    res.status(201).json({ message: "User created successfully" });
+    
+    if (userRole === 'admin') {
+      res.status(201).json({ message: "Admin account created. Please wait for approval before logging in." });
+    } else {
+      res.status(201).json({ message: "User created successfully" });
+    }
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({ error: err.errors[0].message });
@@ -80,8 +88,9 @@ app.post('/api/login', async (req, res) => {
       return res.status(403).json({ error: "Your account has been banned. Please contact support." });
     }
 
-    if (!user.is_approved) {
-      return res.status(403).json({ error: "Your account is pending admin approval." });
+    // Admin accounts require approval via pgAdmin before they can log in
+    if (user.role === 'admin' && !user.is_approved) {
+      return res.status(403).json({ error: "Your admin account is pending approval. Please contact the system administrator." });
     }
 
     const token = jwt.sign(
@@ -362,17 +371,81 @@ app.patch('/api/requests/:id/status', verifyToken, async (req, res) => {
       return res.status(403).json({ error: "Unauthorized to update this request" });
     }
 
-    // If it was a broadcast request and someone accepted it, assign them as receiver
+    // If it was a broadcast request and someone accepted it, assign them as receiver (helper/giver)
     let query = "UPDATE requests SET status = $1 WHERE id = $2 RETURNING *";
     let params = [status, id];
+
+    // The person accepting becomes the receiver (they are the helper/giver)
+    let giverId = request.receiver_id || userId; // The helper who will give the item
 
     if (request.receiver_id === null && status === 'accepted') {
       query = "UPDATE requests SET status = $1, receiver_id = $3 WHERE id = $2 RETURNING *";
       params = [status, id, userId];
+      giverId = userId; // The current user is accepting, so they become the giver
     }
 
     const result = await pool.query(query, params);
-    res.json(result.rows[0]);
+    const updatedRequest = result.rows[0];
+
+    // Handle inventory transfer when request is ACCEPTED
+    // Giver (receiver_id) gives items to Requester (sender_id)
+    if (status === 'accepted') {
+      const { item_name, quantity, sender_id } = updatedRequest;
+      const actualGiverId = updatedRequest.receiver_id;
+
+      console.log(`Processing transfer: ${quantity} x "${item_name}" from giver ${actualGiverId} to requester ${sender_id}`);
+
+      // 1. Deduct from the giver's inventory
+      const giverItem = await pool.query(
+        'SELECT * FROM items WHERE user_id = $1 AND item_name ILIKE $2',
+        [actualGiverId, item_name]
+      );
+      
+      let itemInfo = {};
+      if (giverItem.rows.length > 0) {
+        itemInfo = giverItem.rows[0];
+        const currentQty = giverItem.rows[0].quantity;
+        const newQty = currentQty - quantity;
+        
+        console.log(`Giver has ${currentQty} units, deducting ${quantity}, new qty: ${newQty}`);
+        
+        if (newQty <= 0) {
+          // Remove item if quantity becomes 0 or less
+          await pool.query('DELETE FROM items WHERE id = $1', [giverItem.rows[0].id]);
+          console.log('Item removed from giver (qty reached 0)');
+        } else {
+          // Update the quantity
+          await pool.query('UPDATE items SET quantity = $1 WHERE id = $2', [newQty, giverItem.rows[0].id]);
+          console.log('Giver inventory updated');
+        }
+      } else {
+        console.log(`Warning: Giver does not have item "${item_name}" in inventory`);
+      }
+
+      // 2. Add to the requester's inventory
+      const requesterItem = await pool.query(
+        'SELECT * FROM items WHERE user_id = $1 AND item_name ILIKE $2',
+        [sender_id, item_name]
+      );
+
+      if (requesterItem.rows.length > 0) {
+        // Item exists, update quantity
+        const newQty = requesterItem.rows[0].quantity + quantity;
+        await pool.query('UPDATE items SET quantity = $1 WHERE id = $2', [newQty, requesterItem.rows[0].id]);
+        console.log(`Requester inventory updated: new qty ${newQty}`);
+      } else {
+        // Item doesn't exist, create new item for requester
+        await pool.query(
+          'INSERT INTO items (item_name, quantity, user_id, item_image, is_public, category_id) VALUES ($1, $2, $3, $4, $5, $6)',
+          [item_name, quantity, sender_id, itemInfo.item_image || null, false, itemInfo.category_id || null]
+        );
+        console.log(`New item created for requester`);
+      }
+
+      console.log(`✅ Inventory transferred: ${quantity} x ${item_name} from user ${actualGiverId} to user ${sender_id}`);
+    }
+
+    res.json(updatedRequest);
   } catch (err) {
     console.error("Status Update Error:", err);
     res.status(500).json({ error: "Failed to update request status" });

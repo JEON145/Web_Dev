@@ -63,7 +63,7 @@ export default function LoginPage({ setUser }) {
                 <path d="M9 22V12h6v10"/>
               </svg>
             </div>
-            <h1>Store Manager</h1>
+            <h1>Inventory Tracker</h1>
             <p>Connect with local shopkeepers. Share inventory. Grow together.</p>
             
             <div className="brand-features">

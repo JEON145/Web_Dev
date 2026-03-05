@@ -88,7 +88,7 @@ export default function RegisterPage() {
         <div className="login-form-section">
           <div className="form-header">
             <h2>Create account</h2>
-            <p>Get started with Store Manager</p>
+            <p>Get started with Inventory Tracker</p>
           </div>
 
           {error && (
